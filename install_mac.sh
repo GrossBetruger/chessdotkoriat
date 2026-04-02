@@ -4,8 +4,9 @@ set -e
 echo "==> Installing Homebrew (if needed)..."
 command -v brew >/dev/null || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-echo "==> Installing Stockfish..."
+echo "==> Installing chess engines..."
 brew list stockfish &>/dev/null || brew install stockfish
+brew list lc0 &>/dev/null || brew install lc0
 
 echo "==> Installing uv..."
 command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh

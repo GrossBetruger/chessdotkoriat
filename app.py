@@ -7,8 +7,16 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-STOCKFISH_PATH = "/opt/homebrew/bin/stockfish"
-ANALYSIS_TIME = 0.3
+ENGINES = {
+    "stockfish": {
+        "path": "/opt/homebrew/bin/stockfish",
+        "limit": chess.engine.Limit(time=0.3),
+    },
+    "lc0": {
+        "path": "/opt/homebrew/bin/lc0",
+        "limit": chess.engine.Limit(nodes=800),
+    },
+}
 
 PIECE_VALUES = {
     chess.PAWN: 100, chess.KNIGHT: 300, chess.BISHOP: 310,
@@ -16,15 +24,18 @@ PIECE_VALUES = {
 }
 
 
-def analyze_game(pgn_text: str) -> dict:
+def analyze_game(pgn_text: str, engine_name: str = "stockfish") -> dict:
     game = chess.pgn.read_game(io.StringIO(pgn_text))
     board = game.board()
     headers = dict(game.headers)
     moves_data = []
 
-    engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+    engine_cfg = ENGINES[engine_name]
+    engine = chess.engine.SimpleEngine.popen_uci(engine_cfg["path"])
+    limit = engine_cfg["limit"]
 
-    prev_cp = _eval_cp(engine, board)
+    prev_score = _eval(engine, board, limit)
+    prev_cp = _eval_cp(prev_score)
     prev_move_was_bad = False
 
     for i, move in enumerate(game.mainline_moves()):
@@ -33,26 +44,22 @@ def analyze_game(pgn_text: str) -> dict:
         move_number = i // 2 + 1
         sign = 1 if is_white else -1
 
-        # Engine's top 2 moves BEFORE the played move
-        multi = engine.analyse(board, chess.engine.Limit(time=ANALYSIS_TIME), multipv=2)
+        multi = engine.analyse(board, limit, multipv=2)
         top_move = multi[0]["pv"][0]
-        top_cp = multi[0]["score"].white().score(mate_score=10000)
-        second_cp = multi[1]["score"].white().score(mate_score=10000) if len(multi) >= 2 else top_cp
+        top_cp = _eval_cp(multi[0]["score"].white())
+        second_cp = _eval_cp(multi[1]["score"].white()) if len(multi) >= 2 else top_cp
 
         is_top = (move == top_move)
         is_sacrifice = _is_sacrifice(board, move, is_white)
 
-        # How far apart are #1 and #2 from the mover's perspective
         gap = (top_cp - second_cp) * sign
-
-        # Position eval from mover's perspective (is it already decided?)
         mover_eval = prev_cp * sign
 
         board.push(move)
 
-        actual_cp = _eval_cp(engine, board)
+        actual_score = _eval(engine, board, limit)
+        actual_cp = _eval_cp(actual_score)
 
-        # Centipawn loss vs engine's best, from mover's perspective
         cp_loss = (top_cp - actual_cp) * sign
 
         classification = _classify(
@@ -60,7 +67,7 @@ def analyze_game(pgn_text: str) -> dict:
             gap=gap,
             is_top=is_top,
             is_sacrifice=is_sacrifice,
-            is_competitive=abs(mover_eval) < 500,
+            is_competitive=-200 < mover_eval < 200,
             prev_was_bad=prev_move_was_bad,
         )
 
@@ -73,7 +80,7 @@ def analyze_game(pgn_text: str) -> dict:
             "is_white": is_white,
             "san": san,
             "score_cp": actual_cp,
-            "score_display": _fmt(actual_cp),
+            "score_display": _fmt_score(actual_score),
             "classification": classification,
             "svg": svg,
         })
@@ -82,9 +89,14 @@ def analyze_game(pgn_text: str) -> dict:
     return {"headers": headers, "moves": moves_data}
 
 
-def _eval_cp(engine, board):
-    info = engine.analyse(board, chess.engine.Limit(time=ANALYSIS_TIME))
-    return info["score"].white().score(mate_score=10000)
+def _eval(engine, board, limit):
+    info = engine.analyse(board, limit)
+    return info["score"].white()
+
+
+def _eval_cp(score):
+    """Clamp to ±1500cp so Lc0's inflated WDL-based centipawns don't break classification."""
+    return max(-1500, min(1500, score.score(mate_score=1500)))
 
 
 def _is_sacrifice(board: chess.Board, move: chess.Move, is_white: bool) -> bool:
@@ -136,11 +148,11 @@ def _classify(cp_loss, gap, is_top, is_sacrifice, is_competitive, prev_was_bad):
     return "good"
 
 
-def _fmt(cp):
-    if abs(cp) >= 9000:
-        mate = (10000 - abs(cp)) * (1 if cp > 0 else -1)
-        return f"M{mate}"
-    return f"{cp / 100:+.2f}"
+def _fmt_score(score):
+    mate = score.mate()
+    if mate is not None:
+        return f"M{mate}" if mate > 0 else f"M{mate}"
+    return f"{score.score() / 100:+.2f}"
 
 
 @app.route("/")
@@ -149,10 +161,16 @@ def index():
 
 
 
+@app.route("/engines")
+def engines():
+    return jsonify(list(ENGINES.keys()))
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     pgn_text = request.json["pgn"]
-    result = analyze_game(pgn_text)
+    engine_name = request.json.get("engine", "stockfish")
+    result = analyze_game(pgn_text, engine_name)
     return jsonify(result)
 
 

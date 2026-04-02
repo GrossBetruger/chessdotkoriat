@@ -84,8 +84,35 @@
       border-color: var(--accent);
     }
 
+    .controls {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    select {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 0.7rem 1rem;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238892b0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.8rem center;
+      padding-right: 2.2rem;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
     button {
-      align-self: flex-end;
       padding: 0.8rem 2.5rem;
       background: var(--accent);
       color: #fff;
@@ -394,12 +421,15 @@ Examples:
 Or paste a full PGN:
   [Event &quot;Casual Game&quot;]
   1. e4 e5 2. Nf3 Nc6 ...">https://www.chess.com/game/live/166780581064</textarea>
-    <button id="analyze-btn" onclick="analyze()">Analyze</button>
+    <div class="controls">
+      <select id="engine-select"></select>
+      <button id="analyze-btn" onclick="analyze()">Analyze</button>
+    </div>
   </div>
 
   <div class="loader" id="loader">
     <div class="spinner"></div>
-    <p>Analyzing with Stockfish...</p>
+    <p>Analyzing...</p>
   </div>
 
   <div class="results" id="results">
@@ -423,6 +453,23 @@ Or paste a full PGN:
 <script>
 let currentMoves = [];
 let selectedIndex = -1;
+
+const ENGINE_LABELS = {
+  stockfish: 'Stockfish',
+  lc0: 'Leela Chess Zero (AlphaZero-style)',
+};
+
+(async function loadEngines() {
+  const resp = await fetch('/engines');
+  const engines = await resp.json();
+  const sel = document.getElementById('engine-select');
+  engines.forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e;
+    opt.textContent = ENGINE_LABELS[e] || e;
+    sel.appendChild(opt);
+  });
+})();
 
 document.addEventListener('keydown', (e) => {
   if (!currentMoves.length) return;
@@ -496,12 +543,14 @@ async function analyze() {
     }
   }
 
-  status.textContent = 'Analyzing with Stockfish...';
+  const engine = document.getElementById('engine-select').value;
+  const engineLabel = ENGINE_LABELS[engine] || engine;
+  status.textContent = `Analyzing with ${engineLabel}...`;
 
   const resp = await fetch('/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pgn }),
+    body: JSON.stringify({ pgn, engine }),
   });
 
   const data = await resp.json();
