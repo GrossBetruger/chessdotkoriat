@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>chess.koriat — Game Analyzer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --card: #0f3460;
+      --accent: #e94560;
+      --text: #eee;
+      --muted: #8892b0;
+      --brilliant: #26c6da;
+      --great: #21c45d;
+      --best: #6bc95b;
+      --excellent: #a3d977;
+      --good: #8da0b0;
+      --inaccuracy: #f59e0b;
+      --miss: #e879f9;
+      --mistake: #f97316;
+      --blunder: #ef4444;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      text-align: center;
+      padding: 2rem 1rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+
+    header h1 span { color: var(--accent); font-weight: 700; }
+
+    header p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 0.3rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    /* Input section */
+    .input-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 1.2rem;
+      resize: vertical;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button {
+      align-self: flex-end;
+      padding: 0.8rem 2.5rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    button:hover { opacity: 0.9; }
+    button:active { transform: scale(0.97); }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Loading */
+    .loader {
+      display: none;
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+
+    .loader.active { display: block; }
+
+    .loader .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      margin: 0 auto 1rem;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    .results { display: none; margin-top: 2rem; }
+    .results.active { display: block; }
+
+    .game-info {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .game-info .player {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .game-info .meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    /* Eval bar */
+    .eval-chart {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      overflow-x: auto;
+    }
+
+    .eval-chart h3 {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .eval-bars {
+      display: flex;
+      align-items: flex-end;
+      height: 200px;
+      gap: 2px;
+      position: relative;
+    }
+
+    .eval-bars .zero-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 1px;
+      background: rgba(255,255,255,0.15);
+    }
+
+    .eval-bar-wrapper {
+      flex: 1;
+      min-width: 6px;
+      max-width: 20px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .eval-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-radius: 2px;
+      transition: opacity 0.15s;
+    }
+
+    .eval-bar.positive {
+      bottom: 50%;
+      background: #fff;
+    }
+
+    .eval-bar.negative {
+      top: 50%;
+      background: #555;
+    }
+
+    .eval-bar-wrapper:hover .eval-bar { opacity: 0.7; }
+
+    .eval-bar-wrapper.selected .eval-bar {
+      outline: 2px solid var(--accent);
+    }
+
+    /* Move list */
+    .move-list {
+      margin-bottom: 2rem;
+    }
+
+    .move-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 3px;
+    }
+
+    .move-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      padding: 0.6rem 1rem;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      text-align: left;
+      z-index: 1;
+    }
+
+    .move-table thead th:first-child {
+      width: 2.5rem;
+      text-align: center;
+    }
+
+    .move-table .col-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .move-table .color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .move-table .color-dot.white { background: #fff; border: 1px solid #555; }
+    .move-table .color-dot.black { background: #333; border: 1px solid #888; }
+
+    .move-cell {
+      background: var(--surface);
+      padding: 0.5rem 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-left: 3px solid transparent;
+    }
+
+    .move-cell:first-child {
+      border-radius: 6px 0 0 6px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.75rem;
+      cursor: default;
+      border-left: none;
+    }
+
+    .move-cell:nth-child(2) { border-radius: 0; }
+    .move-cell:last-child { border-radius: 0 6px 6px 0; }
+
+    .move-cell:hover:not(:first-child) { background: var(--card); }
+    .move-cell.selected { background: var(--card); border-left-color: var(--accent); }
+
+    .move-cell .move-inner {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .move-cell .san {
+      font-weight: 600;
+      font-size: 1rem;
+      min-width: 3.5rem;
+    }
+
+    .move-cell .eval {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-left: auto;
+    }
+
+    .move-cell.empty {
+      cursor: default;
+    }
+
+    .move-item .badge {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .badge.brilliant { background: var(--brilliant); color: #000; }
+    .badge.great { background: var(--great); color: #000; }
+    .badge.best { background: var(--best); color: #000; }
+    .badge.excellent { background: var(--excellent); color: #000; }
+    .badge.good { background: var(--good); color: #000; }
+    .badge.inaccuracy { background: var(--inaccuracy); color: #000; }
+    .badge.miss { background: var(--miss); color: #000; }
+    .badge.mistake { background: var(--mistake); color: #000; }
+    .badge.blunder { background: var(--blunder); color: #fff; }
+
+    /* Board viewer */
+    .board-viewer {
+      display: flex;
+      justify-content: center;
+      padding: 2rem 0;
+    }
+
+    .board-viewer svg {
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Summary */
+    .summary {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .summary-col { flex: 1; min-width: 200px; }
+    .summary-col h4 {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.8rem;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.3rem 0;
+      font-size: 0.85rem;
+    }
+
+    .stat-row .label { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>chess<span>.koriat</span></h1>
+  <p>paste a PGN or chess.com link, get engine analysis</p>
+</header>
+
+<div class="container">
+  <div class="input-section">
+    <textarea id="pgn-input" placeholder="Paste a PGN or a chess.com game URL...
+
+Examples:
+  https://www.chess.com/game/live/166780581064
+  https://www.chess.com/game/166780581064
+
+Or paste a full PGN:
+  [Event &quot;Casual Game&quot;]
+  1. e4 e5 2. Nf3 Nc6 ...">https://www.chess.com/game/live/166780581064</textarea>
+    <button id="analyze-btn" onclick="analyze()">Analyze</button>
+  </div>
+
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <p>Analyzing with Stockfish...</p>
+  </div>
+
+  <div class="results" id="results">
+    <div class="game-info" id="game-info"></div>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="eval-chart">
+      <h3>Evaluation</h3>
+      <div class="eval-bars" id="eval-bars">
+        <div class="zero-line"></div>
+      </div>
+    </div>
+
+    <div class="board-viewer" id="board-viewer"></div>
+
+    <div class="move-list" id="move-list"></div>
+  </div>
+</div>
+
+<script>
+let currentMoves = [];
+let selectedIndex = -1;
+
+document.addEventListener('keydown', (e) => {
+  if (!currentMoves.length) return;
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    selectMove(Math.min(selectedIndex + 1, currentMoves.length - 1));
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    selectMove(Math.max(selectedIndex - 1, 0));
+  }
+});
+
+function parseChessComUrl(text) {
+  const m = text.trim().match(/chess\.com\/game\/(?:live\/)?(\d+)/);
+  return m ? m[1] : null;
+}
+
+const PROXIES = [
+  url => url,                                                    // direct
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,  // proxy fallback
+];
+
+async function proxiedFetch(url) {
+  for (const wrap of PROXIES) {
+    try {
+      const resp = await fetch(wrap(url));
+      if (resp.ok) return resp;
+    } catch (_) {}
+  }
+  throw new Error(`All fetch attempts failed for ${url}`);
+}
+
+async function fetchChessComPgn(gameId) {
+  const cbResp = await proxiedFetch(`https://www.chess.com/callback/live/game/${gameId}`);
+  const cbData = await cbResp.json();
+  const username = cbData.players.top.username;
+  const [year, month] = cbData.game.pgnHeaders.Date.split('.');
+
+  const archResp = await proxiedFetch(`https://api.chess.com/pub/player/${username}/games/${year}/${month}`);
+  const archData = await archResp.json();
+
+  const game = archData.games.find(g => g.url && g.url.includes(gameId));
+  return game.pgn;
+}
+
+async function analyze() {
+  let input = document.getElementById('pgn-input').value.trim();
+  const btn = document.getElementById('analyze-btn');
+  const loader = document.getElementById('loader');
+  const results = document.getElementById('results');
+  const status = loader.querySelector('p');
+
+  btn.disabled = true;
+  loader.classList.add('active');
+  results.classList.remove('active');
+
+  let pgn = input;
+  const gameId = parseChessComUrl(input);
+
+  if (gameId) {
+    status.textContent = 'Fetching game from chess.com...';
+    try {
+      pgn = await fetchChessComPgn(gameId);
+      document.getElementById('pgn-input').value = pgn;
+    } catch (e) {
+      status.textContent = '';
+      loader.classList.remove('active');
+      btn.disabled = false;
+      alert('Could not fetch game from chess.com.\nTry opening the game on chess.com, copying the PGN, and pasting it here.');
+      return;
+    }
+  }
+
+  status.textContent = 'Analyzing with Stockfish...';
+
+  const resp = await fetch('/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pgn }),
+  });
+
+  const data = await resp.json();
+  currentMoves = data.moves;
+
+  btn.disabled = false;
+  loader.classList.remove('active');
+  results.classList.add('active');
+
+  renderGameInfo(data.headers);
+  renderSummary(data.moves);
+  renderEvalBars(data.moves);
+  renderMoveList(data.moves, data.headers);
+
+  if (data.moves.length > 0) selectMove(data.moves.length - 1);
+}
+
+function renderGameInfo(headers) {
+  const el = document.getElementById('game-info');
+  const white = headers.White || '?';
+  const black = headers.Black || '?';
+  const result = headers.Result || '*';
+  const event = headers.Event || '';
+  const date = headers.Date || '';
+  el.innerHTML = `
+    <div>
+      <div class="player">⬜ ${white} vs ⬛ ${black}</div>
+      <div class="meta">${event}${date ? ' — ' + date : ''}</div>
+    </div>
+    <div class="player" style="font-size:1.3rem">${result}</div>
+  `;
+}
+
+function renderSummary(moves) {
+  const el = document.getElementById('summary');
+  const whiteMoves = moves.filter(m => m.is_white);
+  const blackMoves = moves.filter(m => !m.is_white);
+
+  function stats(arr) {
+    const counts = { brilliant: 0, great: 0, best: 0, excellent: 0, good: 0, inaccuracy: 0, miss: 0, mistake: 0, blunder: 0 };
+    arr.forEach(m => counts[m.classification]++);
+    return counts;
+  }
+
+  const ws = stats(whiteMoves);
+  const bs = stats(blackMoves);
+
+  function col(name, s) {
+    return `<div class="summary-col">
+      <h4>${name}</h4>
+      <div class="stat-row"><span class="label">Brilliant</span><span>${s.brilliant}</span></div>
+      <div class="stat-row"><span class="label">Great</span><span>${s.great}</span></div>
+      <div class="stat-row"><span class="label">Best</span><span>${s.best}</span></div>
+      <div class="stat-row"><span class="label">Excellent</span><span>${s.excellent}</span></div>
+      <div class="stat-row"><span class="label">Good</span><span>${s.good}</span></div>
+      <div class="stat-row"><span class="label">Inaccuracies</span><span>${s.inaccuracy}</span></div>
+      <div class="stat-row"><span class="label">Misses</span><span>${s.miss}</span></div>
+      <div class="stat-row"><span class="label">Mistakes</span><span>${s.mistake}</span></div>
+      <div class="stat-row"><span class="label">Blunders</span><span>${s.blunder}</span></div>
+    </div>`;
+  }
+
+  el.innerHTML = col('White', ws) + col('Black', bs);
+}
+
+function renderEvalBars(moves) {
+  const container = document.getElementById('eval-bars');
+  container.innerHTML = '<div class="zero-line"></div>';
+
+  const maxCp = 500;
+
+  moves.forEach((m, i) => {
+    const cp = Math.max(-maxCp, Math.min(maxCp, m.score_cp));
+    const pct = Math.abs(cp) / maxCp * 50;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'eval-bar-wrapper';
+    wrapper.title = `${m.is_white ? m.move_number + '.' : m.move_number + '...'} ${m.san}  ${m.score_display}`;
+    wrapper.onclick = () => selectMove(i);
+    wrapper.dataset.index = i;
+
+    const bar = document.createElement('div');
+    bar.className = `eval-bar ${cp >= 0 ? 'positive' : 'negative'}`;
+    bar.style.height = pct + '%';
+
+    wrapper.appendChild(bar);
+    container.appendChild(wrapper);
+  });
+}
+
+function renderMoveList(moves, headers) {
+  const el = document.getElementById('move-list');
+  const whiteName = headers.White || 'White';
+  const blackName = headers.Black || 'Black';
+
+  // Group moves into pairs by move number
+  const rows = [];
+  for (let i = 0; i < moves.length; i++) {
+    const m = moves[i];
+    if (m.is_white) {
+      rows.push({ num: m.move_number, white: { m, idx: i }, black: null });
+    } else {
+      if (rows.length && rows[rows.length - 1].black === null) {
+        rows[rows.length - 1].black = { m, idx: i };
+      } else {
+        rows.push({ num: m.move_number, white: null, black: { m, idx: i } });
+      }
+    }
+  }
+
+  function cell(data) {
+    if (!data) return '<td class="move-cell empty"></td>';
+    const m = data.m;
+    return `<td class="move-cell" data-index="${data.idx}" onclick="selectMove(${data.idx})">
+      <div class="move-inner">
+        <span class="san">${m.san}</span>
+        <span class="badge ${m.classification}">${m.classification}</span>
+        <span class="eval">${m.score_display}</span>
+      </div>
+    </td>`;
+  }
+
+  el.innerHTML = `<table class="move-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th><div class="col-header"><span class="color-dot white"></span>${whiteName}</div></th>
+        <th><div class="col-header"><span class="color-dot black"></span>${blackName}</div></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => `<tr>
+        <td class="move-cell">${r.num}</td>
+        ${cell(r.white)}
+        ${cell(r.black)}
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function selectMove(index) {
+  selectedIndex = index;
+
+  document.querySelectorAll('.move-cell[data-index]').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.eval-bar-wrapper').forEach(el => el.classList.remove('selected'));
+
+  const moveCell = document.querySelector(`.move-cell[data-index="${index}"]`);
+  const barItem = document.querySelector(`.eval-bar-wrapper[data-index="${index}"]`);
+  if (moveCell) { moveCell.classList.add('selected'); moveCell.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  if (barItem) barItem.classList.add('selected');
+
+  document.getElementById('board-viewer').innerHTML = currentMoves[index].svg;
+}
+</script>
+
+</body>
+</html>
