@@ -699,7 +699,7 @@ function selectMove(index) {
 
   const moveCell = document.querySelector(`.move-cell[data-index="${index}"]`);
   const barItem = document.querySelector(`.eval-bar-wrapper[data-index="${index}"]`);
-  if (moveCell) { moveCell.classList.add('selected'); moveCell.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  if (moveCell) { moveCell.classList.add('selected'); }
   if (barItem) barItem.classList.add('selected');
 
   document.getElementById('board-viewer').innerHTML = currentMoves[index].svg;
