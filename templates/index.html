@@ -360,10 +360,30 @@
     .badge.blunder { background: var(--blunder); color: #fff; }
 
     /* Board viewer */
+    .board-controls {
+      display: flex;
+      justify-content: center;
+      padding: 0.5rem 0 0;
+    }
+
+    .flip-btn {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      align-self: auto;
+    }
+
+    .flip-btn:hover { color: var(--text); border-color: var(--accent); }
+
     .board-viewer {
       display: flex;
       justify-content: center;
-      padding: 2rem 0;
+      padding: 1rem 0 2rem;
     }
 
     .board-viewer svg {
@@ -444,6 +464,9 @@ Or paste a full PGN:
       </div>
     </div>
 
+    <div class="board-controls">
+      <button class="flip-btn" onclick="flipBoard()">Flip Board</button>
+    </div>
     <div class="board-viewer" id="board-viewer"></div>
 
     <div class="move-list" id="move-list"></div>
@@ -453,6 +476,12 @@ Or paste a full PGN:
 <script>
 let currentMoves = [];
 let selectedIndex = -1;
+let boardFlipped = false;
+
+function flipBoard() {
+  boardFlipped = !boardFlipped;
+  if (selectedIndex >= 0) selectMove(selectedIndex);
+}
 
 const ENGINE_LABELS = {
   stockfish: 'Stockfish',
@@ -702,7 +731,8 @@ function selectMove(index) {
   if (moveCell) { moveCell.classList.add('selected'); }
   if (barItem) barItem.classList.add('selected');
 
-  document.getElementById('board-viewer').innerHTML = currentMoves[index].svg;
+  const m = currentMoves[index];
+  document.getElementById('board-viewer').innerHTML = boardFlipped ? m.svg_flipped : m.svg;
 }
 </script>
 

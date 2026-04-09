@@ -74,7 +74,8 @@ def analyze_game(pgn_text: str, engine_name: str = "stockfish") -> dict:
         prev_move_was_bad = cp_loss >= 150
         prev_cp = actual_cp
 
-        svg = chess.svg.board(board, lastmove=move, size=400)
+        svg_white = chess.svg.board(board, lastmove=move, size=400)
+        svg_black = chess.svg.board(board, lastmove=move, size=400, flipped=True)
         moves_data.append({
             "move_number": move_number,
             "is_white": is_white,
@@ -82,7 +83,8 @@ def analyze_game(pgn_text: str, engine_name: str = "stockfish") -> dict:
             "score_cp": actual_cp,
             "score_display": _fmt_score(actual_score),
             "classification": classification,
-            "svg": svg,
+            "svg": svg_white,
+            "svg_flipped": svg_black,
         })
 
     engine.quit()
